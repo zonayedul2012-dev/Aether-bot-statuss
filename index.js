@@ -7,67 +7,70 @@ const {
 const { status } = require("minecraft-server-util");
 
 const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds
-  ]
+  intents: [GatewayIntentBits.Guilds]
 });
 
 const HOST = "play4.eternalzero.cloud";
 const PORT = 26659;
+const CHANNEL_ID = "1539570167212675172";
 
-let lastOnline = false;
+let lastOnline = null;
 let lastPlayers = new Set();
 
 async function checkServer() {
+  const channel = await client.channels.fetch(CHANNEL_ID);
+
   try {
     const result = await status(HOST, PORT, {
       timeout: 5000
     });
 
+    const online = result.players.online;
+    const max = result.players.max;
+
     const players = new Set(
-      (result.players.sample || []).map(p => p.name)
+      (result.players.sample || []).map(player => player.name)
     );
 
     // Server came online
-    if (!lastOnline) {
-      console.log("SERVER ONLINE");
+    if (lastOnline === false) {
+      await channel.send(`🟢 **Server Online**\n${online}/${max} players online.`);
     }
 
-    // Players who joined
-    for (const player of players) {
-      if (!lastPlayers.has(player)) {
-        console.log(`${player} joined the server`);
+    // Server was already online
+    if (lastOnline === true) {
+      for (const player of players) {
+        if (!lastPlayers.has(player)) {
+          await channel.send(`🟢 **${player} joined**`);
+        }
       }
-    }
 
-    // Players who left
-    for (const player of lastPlayers) {
-      if (!players.has(player)) {
-        console.log(`${player} left the server`);
+      for (const player of lastPlayers) {
+        if (!players.has(player)) {
+          await channel.send(`🔴 **${player} left**`);
+        }
       }
     }
 
     lastPlayers = players;
     lastOnline = true;
 
-    console.log(
-      `Online — ${result.players.online}/${result.players.max} players`
-    );
+    console.log(`ONLINE — ${online}/${max}`);
 
-  } catch (error) {
-    if (lastOnline) {
-      console.log("SERVER OFFLINE");
+  } catch {
+    if (lastOnline === true) {
+      await channel.send(`🔴 **Server Offline**`);
     }
 
-    lastOnline = false;
     lastPlayers = new Set();
+    lastOnline = false;
 
-    console.log("Server offline");
+    console.log("OFFLINE");
   }
 }
 
 client.once("ready", () => {
-  console.log(`Logged in as ${client.user.tag}`);
+  console.log(`Bot logged in as ${client.user.tag}`);
 
   checkServer();
   setInterval(checkServer, 15000);
